@@ -54,17 +54,26 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _startNewChat(initial: true);
-  }
-
-  void _startNewChat({bool initial = false}) {
+  }  void _startNewChat({bool initial = false}) {
     if (_msgs.isNotEmpty && !initial) {
       _savedChats.add(ChatSession(title: _msgs.first.text, messages: List.from(_msgs)));
     }
     setState(() {
-      _msgs = [Message(text: "Ni Hao! I am AOOR AI, your expert assistant guiding you through Chinese scholarships, university admissions, student visa processing, document authentication, legalization, and notarization.", isUser: false)];
+      _msgs = [
+        Message(
+          text: "Ni Hao! Welcome to AOOR AI.\n\n"
+                "I am your dedicated expert assistant strictly designed to guide you through:\n"
+                "• Chinese Government & University Scholarships\n"
+                "• University Admissions & Application Procedures\n"
+                "• Student Visa Processing\n"
+                "• Nigerian Document Authentication, Legalization & Notarization\n\n"
+                "How can I assist with your study-abroad journey today?",
+          isUser: false,
+        )
+      ];
     });
   }
-
+  
   void _loadSession(ChatSession session) {
     setState(() {
       _msgs = List.from(session.messages);
