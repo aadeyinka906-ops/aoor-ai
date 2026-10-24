@@ -181,7 +181,7 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _file;
   StreamSubscription? _sub;
 
-  static const String _apiKey = 'AQ.Ab8RN6JyQ8p_6JaCyIMR8Q-J8wbOiBLdLPPQdcvXgVb1Sp8eLA';
+  static const String _apiKey = 'AQ.Ab8RN...'; 
 
   @override
   void initState() {
