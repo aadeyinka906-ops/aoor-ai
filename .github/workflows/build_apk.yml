@@ -27,7 +27,10 @@ jobs:
         run: flutter pub get
 
       - name: Generate Android Scaffold
-        run: flutter create . --platforms=android
+        run: |
+          flutter create temp_project --platforms=android --project-name=aoor_ai
+          cp -r temp_project/android ./
+          rm -rf temp_project
 
       - name: Build APK Release
         run: flutter build apk --release --dart-define=GEMINI_API_KEY=${{secrets.GEMINI_API_KEY}}
