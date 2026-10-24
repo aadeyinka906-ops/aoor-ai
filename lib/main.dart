@@ -103,10 +103,10 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollDown();
 
     try {
-      final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$_apiKey');
-      final req = http.Request('POST', url)
-        ..headers['Content-Type'] = 'application/json'
-        ..body = jsonEncode({
+      final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent');
+final req = http.Request('POST', url)
+  ..headers['Content-Type'] = 'application/json'
+  ..headers['x-goog-api-key'] = _apiKey
           "contents": [{
             "parts": [{
               "text": "You are AOOR AI, an expert consultant guiding students through Chinese scholarships, university admissions, student visa processing, and Nigerian document authentication, legalization, and notarization. No markdown asterisks (**). Query: $text"
