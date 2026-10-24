@@ -1,35 +1,36 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'dart:async';
 
-void main() => runApp(const AOORApp());
+void main() => runApp(const MyApp());
 
-class AOORApp extends StatelessWidget {
-  const AOORApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false,
+      title: 'AOOR AI',
       theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0F172A), secondary: const Color(0xFFD97706)),
+        primarySwatch: Colors.blue,
+        scaffoldBackgroundColor: Colors.white,
       ),
       home: const ChatScreen(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
 
 class Message {
   String text;
-  final bool isUser;
+  bool isUser;
   Message({required this.text, required this.isUser});
 }
 
 class ChatSession {
-  final String title;
-  final List<Message> messages;
+  String title;
+  List<Message> messages;
   ChatSession({required this.title, required this.messages});
 }
 
@@ -41,8 +42,8 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final _ctrl = TextEditingController();
-  final _scroll = ScrollController();
+  final TextEditingController _ctrl = TextEditingController();
+  final ScrollController _scroll = ScrollController();
   final List<ChatSession> _savedChats = [];
   List<Message> _msgs = [];
   bool _loading = false;
@@ -54,7 +55,17 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _startNewChat(initial: true);
-  }  void _startNewChat({bool initial = false}) {
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _scroll.dispose();
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  void _startNewChat({bool initial = false}) {
     if (_msgs.isNotEmpty && !initial) {
       _savedChats.add(ChatSession(title: _msgs.first.text, messages: List.from(_msgs)));
     }
@@ -73,7 +84,7 @@ class _ChatScreenState extends State<ChatScreen> {
       ];
     });
   }
-  
+
   void _loadSession(ChatSession session) {
     setState(() {
       _msgs = List.from(session.messages);
@@ -104,12 +115,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent');
-final req = http.Request('POST', url)
-  ..headers['Content-Type'] = 'application/json'
-  ..headers['x-goog-api-key'] = _apiKey
+      final req = http.Request('POST', url)
+        ..headers['Content-Type'] = 'application/json'
+        ..headers['x-goog-api-key'] = _apiKey
+        ..body = jsonEncode({
           "contents": [{
             "parts": [{
-              "text": "You are AOOR AI, an expert consultant guiding students through Chinese scholarships, university admissions, student visa processing, and Nigerian document authentication, legalization, and notarization. No markdown asterisks (**). Query: $text"
+              "text": "You are AOOR AI, an expert consultant guiding students through Chinese scholarships, university admissions, student visa processing, and Nigerian document authentication, legalization, and notarization. No markdown asterisks. Query: $text"
             }]
           }]
         });
@@ -122,20 +134,27 @@ final req = http.Request('POST', url)
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['candidates'] != null && data['candidates'].isNotEmpty) {
-          reply = data['candidates'][0]['content']['parts'][0]['text'].replaceAll('**', '');
+          reply = data['candidates'][0]['content']['parts'][0]['text'].replaceAll('*', '');
         } else {
           reply = "No response generated from AI.";
         }
       } else {
         reply = "API Error (${res.statusCode}): Check your API key configuration.";
       }
+
       if (!mounted) return;
-      setState(() { _msgs.add(Message(text: reply, isUser: false)); _loading = false; });
+      setState(() {
+        _msgs.add(Message(text: reply, isUser: false));
+        _loading = false;
+      });
+      _scrollDown();
     } catch (_) {
       if (!mounted) return;
-      setState(() { _msgs.add(Message(text: "Request stopped or network error.", isUser: false)); _loading = false; });
+      setState(() {
+        _loading = false;
+        _msgs.add(Message(text: "Request stopped or network error.", isUser: false));
+      });
     }
-    _scrollDown();
   }
 
   void _edit(int idx) {
@@ -143,7 +162,7 @@ final req = http.Request('POST', url)
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Edit Message', style: TextStyle(fontSize: 14)),
+        title: const Text('Edit Message'),
         content: TextField(controller: _ctrl, maxLines: 2, decoration: const InputDecoration(border: OutlineInputBorder())),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
@@ -155,7 +174,9 @@ final req = http.Request('POST', url)
 
   void _scrollDown() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients) _scroll.animateTo(_scroll.position.maxScrollExtent, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+      if (_scroll.hasClients) {
+        _scroll.animateTo(_scroll.position.maxScrollExtent, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+      }
     });
   }
 
@@ -163,101 +184,161 @@ final req = http.Request('POST', url)
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.white, elevation: 1,
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('AOOR AI', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-            Text('China Admissions & Legalization Assistant', style: TextStyle(fontSize: 10, color: Colors.grey)),
+            Text('AOOR AI', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text('China Admissions & Legalization Assistant', style: TextStyle(fontSize: 11, color: Colors.grey)),
           ],
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.add, color: Color(0xFFD97706)), tooltip: 'New Chat', onPressed: () => _startNewChat()),
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () => _startNewChat(),
+          ),
         ],
       ),
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            const UserAccountsDrawerHeader(
-              decoration: BoxDecoration(color: Color(0xFF0F172A)),
-              accountName: Text('AOOR AI Assistant'),
-              accountEmail: Text('Expert Guidance for Students'),
-              currentAccountPicture: CircleAvatar(backgroundColor: Color(0xFFD97706), child: Text('AO', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold))),
+            const DrawerHeader(
+              decoration: BoxDecoration(color: Colors.blue),
+              child: Text('Chat History', style: TextStyle(color: Colors.white, fontSize: 20)),
             ),
             ListTile(
-              leading: const Icon(Icons.add_comment_rounded, color: Color(0xFFD97706)),
-              title: const Text('Start New Chat'),
-              onTap: () { _startNewChat(); Navigator.pop(context); },
+              leading: const Icon(Icons.add),
+              title: const Text('New Chat'),
+              onTap: () {
+                Navigator.pop(context);
+                _startNewChat();
+              },
             ),
             const Divider(),
-            const Padding(padding: EdgeInsets.all(12), child: Text('Saved Chats History', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey))),
-            if (_savedChats.isEmpty)
-              const Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('No saved chats yet.', style: TextStyle(fontSize: 11, color: Colors.grey))),
-            for (var session in _savedChats)
-              ListTile(
-                leading: const Icon(Icons.chat_bubble_outline, size: 18),
-                title: Text(session.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-                onTap: () => _loadSession(session),
-              ),
+            ..._savedChats.map((s) => ListTile(
+              title: Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+              onTap: () => _loadSession(s),
+            )),
           ],
         ),
       ),
       body: Column(
         children: [
-          SizedBox(
-            height: 44,
-            child: ListView(
-              scrollDirection: Axis.horizontal, 
-              padding: const EdgeInsets.symmetric(horizontal: 8), 
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
               children: [
-                ActionChip(label: const Text('Scholarships', style: TextStyle(fontSize: 11)), onPressed: () => _send(custom: 'Tell me about Chinese government and university scholarships.')),
-                const SizedBox(width: 6),
-                ActionChip(label: const Text('Admissions', style: TextStyle(fontSize: 11)), onPressed: () => _send(custom: 'What are the steps for Chinese university admissions?')),
-                const SizedBox(width: 6),
-                ActionChip(label: const Text('Visa Processing', style: TextStyle(fontSize: 11)), onPressed: () => _send(custom: 'Guide me through Chinese student visa processing.')),
-                const SizedBox(width: 6),
-                ActionChip(label: const Text('Legalization', style: TextStyle(fontSize: 11)), onPressed: () => _send(custom: 'Explain document authentication, legalization, and notarization for China.')),
+                ActionChip(
+                  label: const Text('Scholarships'),
+                  onPressed: () => _send(custom: 'I need information about Chinese Government and university scholarships for undergraduate and master degrees.'),
+                ),
+                const SizedBox(width: 8),
+                ActionChip(
+                  label: const Text('Admissions'),
+                  onPressed: () => _send(custom: 'What are the university admission requirements and procedures for studying in China?'),
+                ),
+                const SizedBox(width: 8),
+                ActionChip(
+                  label: const Text('Visa Processing'),
+                  onPressed: () => _send(custom: 'Guide me through Chinese student visa X1 and X2 processing requirements.'),
+                ),
+                const SizedBox(width: 8),
+                ActionChip(
+                  label: const Text('Legalization'),
+                  onPressed: () => _send(custom: 'Explain Nigerian document authentication, legalization, and notarization steps for China.'),
+                ),
               ],
             ),
           ),
           const Divider(height: 1),
-          Expanded(child: ListView.builder(controller: _scroll, padding: const EdgeInsets.all(12), itemCount: _msgs.length, itemBuilder: (_, i) => _bubble(_msgs[i], i))),
+          Expanded(
+            child: ListView.builder(
+              controller: _scroll,
+              padding: const EdgeInsets.all(12),
+              itemCount: _msgs.length,
+              itemBuilder: (context, idx) {
+                final m = _msgs[idx];
+                return Align(
+                  alignment: m.isUser ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 6),
+                    padding: const EdgeInsets.all(12),
+                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
+                    decoration: BoxDecoration(
+                      color: m.isUser ? const Color(0xFF11172A) : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          m.text,
+                          style: TextStyle(color: m.isUser ? Colors.white : Colors.black87),
+                        ),
+                        if (m.isUser) ...[
+                          const SizedBox(height: 4),
+                          GestureDetector(
+                            onTap: () => _edit(idx),
+                            child: const Align(
+                              alignment: Alignment.bottomRight,
+                              child: Text('Edit', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                            ),
+                          ),
+                        ]
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
           if (_loading)
-            Padding(padding: const EdgeInsets.all(8), child: Row(children: [
-              const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-              const SizedBox(width: 8),
-              const Text('Thinking...', style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
-              const Spacer(),
-              TextButton(onPressed: _stop, child: const Text('Stop', style: TextStyle(color: Colors.red, fontSize: 11)))
-            ])),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('AI is thinking... '),
+                  const SizedBox(width: 8),
+                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(width: 16),
+                  TextButton(onPressed: _stop, child: const Text('Stop', style: TextStyle(color: Colors.red)))
+                ],
+              ),
+            ),
           Container(
-            padding: const EdgeInsets.all(8), color: Colors.white,
-            child: Row(children: [
-              Expanded(child: TextField(controller: _ctrl, decoration: const InputDecoration(hintText: 'Ask anything about China admissions & legalization...', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 8)))),
-              CircleAvatar(radius: 18, backgroundColor: const Color(0xFF0F172A), child: IconButton(icon: const Icon(Icons.send_rounded, color: Color(0xFFD97706), size: 16), onPressed: () => _send()))
-            ]),
-          )
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, -2))],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _ctrl,
+                    maxLines: 2,
+                    minLines: 1,
+                    decoration: const InputDecoration(
+                      hintText: 'Ask anything about China admissions & legalization...',
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                  ),
+                ),
+                CircleAvatar(
+                  backgroundColor: const Color(0xFF11172A),
+                  radius: 20,
+                  child: IconButton(
+                    icon: const Icon(Icons.send, color: Colors.white, size: 18),
+                    onPressed: () => _send(),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
-      ),
-    );
-  }
-
-  Widget _bubble(Message msg, int i) {
-    return Align(
-      alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: msg.isUser ? const Color(0xFF0F172A) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(msg.text, style: TextStyle(color: msg.isUser ? Colors.white : Colors.black87, fontSize: 13)),
-          if (msg.isUser) GestureDetector(onTap: () => _edit(i), child: const Align(alignment: Alignment.centerRight, child: Text('Edit', style: TextStyle(color: Color(0xFFD97706), fontSize: 9, decoration: TextDecoration.underline)))),
-        ]),
       ),
     );
   }
