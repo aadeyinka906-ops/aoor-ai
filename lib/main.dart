@@ -181,7 +181,7 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _file;
   StreamSubscription? _sub;
 
-  static const String _apiKey = 'YOUR_API_KEY_HERE';
+  static const String _apiKey = String.fromEnvironment('GEMINI_API_KEY');
 
   @override
   void initState() {
