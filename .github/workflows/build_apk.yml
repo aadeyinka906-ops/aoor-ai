@@ -26,6 +26,9 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
+      - name: Generate Android Scaffold
+        run: flutter create . --platforms=android
+
       - name: Build APK Release
         run: flutter build apk --release --dart-define=GEMINI_API_KEY=${{secrets.GEMINI_API_KEY}}
 
