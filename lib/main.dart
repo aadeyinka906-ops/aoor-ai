@@ -16,145 +16,15 @@ class AOORApp extends StatelessWidget {
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0F172A), secondary: const Color(0xFFD97706)),
       ),
-      home: const AuthScreen(),
+      home: const ChatScreen(),
     );
-  }
-}
-
-class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
-
-  @override
-  State<AuthScreen> createState() => _AuthScreenState();
-}
-
-class _AuthScreenState extends State<AuthScreen> {
-  final _emailCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
-  bool _loggedIn = false;
-  String _userEmail = '';
-
-  void _loginWithEmail() {
-    if (_emailCtrl.text.trim().isEmpty) return;
-    setState(() {
-      _userEmail = _emailCtrl.text.trim();
-      _loggedIn = true;
-    });
-  }
-
-  void _showGoogleAccountPicker() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
-                  child: const Text('G', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 18)),
-                ),
-                const SizedBox(width: 12),
-                const Text('Sign in with Google', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text('Choose an account to continue to AOOR AI', style: TextStyle(fontSize: 12, color: Colors.grey)),
-            const Divider(height: 24),
-            ListTile(
-              leading: const CircleAvatar(backgroundColor: Color(0xFF0F172A), child: Text('A', style: TextStyle(color: Color(0xFFD97706)))),
-              title: const Text('Adeniyi Adeyinka'),
-              subtitle: const Text('adeniyi.adeyinka@gmail.com'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _userEmail = 'adeniyi.adeyinka@gmail.com';
-                  _loggedIn = true;
-                });
-              },
-            ),
-            ListTile(
-              leading: const CircleAvatar(backgroundColor: Color(0xFFD97706), child: Text('AO', style: TextStyle(color: Color(0xFF0F172A)))),
-              title: const Text('AOOR AI Scholar'),
-              subtitle: const Text('aoor.ai.official@gmail.com'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _userEmail = 'aoor.ai.official@gmail.com';
-                  _loggedIn = true;
-                });
-              },
-            ),
-            ListTile(
-              leading: const CircleAvatar(backgroundColor: Colors.grey, child: Icon(Icons.person_add, color: Colors.white, size: 18)),
-              title: const Text('Use another account'),
-              onTap: () {
-                Navigator.pop(context);
-                // Fallback or prompt for custom email
-                setState(() {
-                  _userEmail = 'custom.user@gmail.com';
-                  _loggedIn = true;
-                });
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_loggedIn) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF0F172A),
-        body: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(width: 65, height: 65, decoration: BoxDecoration(color: const Color(0xFFD97706), borderRadius: BorderRadius.circular(14)),
-                  child: const Center(child: Text('AO', style: TextStyle(color: Color(0xFF0F172A), fontSize: 26, fontWeight: FontWeight.bold)))),
-                const SizedBox(height: 20),
-                const Text('AOOR AI', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                const Text('Sign in to save your chat sessions & records', style: TextStyle(color: Colors.white70, fontSize: 12), textAlign: TextAlign.center),
-                const SizedBox(height: 24),
-                TextField(controller: _emailCtrl, style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(hintText: 'Email address', hintStyle: const TextStyle(color: Colors.white54), filled: true, fillColor: Colors.white10, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none))),
-                const SizedBox(height: 12),
-                TextField(controller: _passCtrl, obscureText: true, style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(hintText: 'Password', hintStyle: const TextStyle(color: Colors.white54), filled: true, fillColor: Colors.white10, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none))),
-                const SizedBox(height: 16),
-                SizedBox(width: double.infinity, height: 45, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD97706), foregroundColor: const Color(0xFF0F172A)), onPressed: _loginWithEmail, child: const Text('Sign In with Email', style: TextStyle(fontWeight: FontWeight.bold)))),
-                const SizedBox(height: 12),
-                SizedBox(width: double.infinity, height: 45, child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white30), foregroundColor: Colors.white),
-                  onPressed: _showGoogleAccountPicker,
-                  icon: const Icon(Icons.g_mobiledata, size: 28, color: Color(0xFFD97706)),
-                  label: const Text('Continue with Google'),
-                )),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-    return ChatScreen(userEmail: _userEmail, onLogout: () => setState(() => _loggedIn = false));
   }
 }
 
 class Message {
   String text;
   final bool isUser;
-  String? attachment;
-  Message({required this.text, required this.isUser, this.attachment});
+  Message({required this.text, required this.isUser});
 }
 
 class ChatSession {
@@ -164,9 +34,7 @@ class ChatSession {
 }
 
 class ChatScreen extends StatefulWidget {
-  final String userEmail;
-  final VoidCallback onLogout;
-  const ChatScreen({super.key, required this.userEmail, required this.onLogout});
+  const ChatScreen({super.key});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -178,7 +46,6 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<ChatSession> _savedChats = [];
   List<Message> _msgs = [];
   bool _loading = false;
-  String? _file;
   StreamSubscription? _sub;
 
   static const String _apiKey = String.fromEnvironment('GEMINI_API_KEY');
@@ -194,7 +61,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _savedChats.add(ChatSession(title: _msgs.first.text, messages: List.from(_msgs)));
     }
     setState(() {
-      _msgs = [Message(text: "Ni Hao! I am AOOR AI, your assistant for Chinese admissions and Nigerian document legalizations.", isUser: false)];
+      _msgs = [Message(text: "Ni Hao! I am AOOR AI, your expert assistant guiding you through Chinese scholarships, university admissions, student visa processing, document authentication, legalization, and notarization.", isUser: false)];
     });
   }
 
@@ -212,15 +79,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _send({String? custom, int? editIdx}) async {
     final text = custom ?? _ctrl.text.trim();
-    if (text.isEmpty && _file == null) return;
-    final att = _file;
+    if (text.isEmpty) return;
 
     setState(() {
       if (editIdx != null) {
         _msgs[editIdx].text = text;
       } else {
-        _msgs.add(Message(text: text.isEmpty ? "Uploaded file: $att" : text, isUser: true, attachment: att));
-        if (custom == null) { _ctrl.clear(); _file = null; }
+        _msgs.add(Message(text: text, isUser: true));
+        if (custom == null) { _ctrl.clear(); }
       }
       _loading = true;
     });
@@ -228,10 +94,16 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollDown();
 
     try {
-      final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=$_apiKey');
+      final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$_apiKey');
       final req = http.Request('POST', url)
         ..headers['Content-Type'] = 'application/json'
-        ..body = jsonEncode({"contents": [{"parts": [{"text": "You are AOOR AI, consultant for Chinese admissions and Nigerian document legalizations. No markdown asterisks (**). Query: $text"}]}]});
+        ..body = jsonEncode({
+          "contents": [{
+            "parts": [{
+              "text": "You are AOOR AI, an expert consultant guiding students through Chinese scholarships, university admissions, student visa processing, and Nigerian document authentication, legalization, and notarization. No markdown asterisks (**). Query: $text"
+            }]
+          }]
+        });
 
       final streamed = await req.send();
       _sub = streamed.stream.listen((_) {});
@@ -239,7 +111,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
       String reply = "Error connecting to AI.";
       if (res.statusCode == 200) {
-        reply = jsonDecode(res.body)['candidates'][0]['content']['parts'][0]['text'].replaceAll('**', '');
+        final data = jsonDecode(res.body);
+        if (data['candidates'] != null && data['candidates'].isNotEmpty) {
+          reply = data['candidates'][0]['content']['parts'][0]['text'].replaceAll('**', '');
+        } else {
+          reply = "No response generated from AI.";
+        }
+      } else {
+        reply = "API Error (${res.statusCode}): Check your API key configuration.";
       }
       if (!mounted) return;
       setState(() { _msgs.add(Message(text: reply, isUser: false)); _loading = false; });
@@ -265,42 +144,6 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  void _pickFile() {
-    final fileCtrl = TextEditingController();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 16, right: 16, top: 16),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Connect Device File', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-              const SizedBox(height: 12),
-              TextField(
-                controller: fileCtrl,
-                decoration: const InputDecoration(hintText: 'Enter file name (e.g. WAEC_Result.pdf)', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), foregroundColor: Colors.white),
-                onPressed: () {
-                  if (fileCtrl.text.isNotEmpty) {
-                    setState(() => _file = fileCtrl.text.trim());
-                    Navigator.pop(context);
-                  }
-                },
-                child: const Text('Attach File'),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   void _scrollDown() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) _scroll.animateTo(_scroll.position.maxScrollExtent, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
@@ -312,27 +155,26 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.white, elevation: 1,
-        title: Column(
+        title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('AOOR AI', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-            Text(widget.userEmail, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            Text('AOOR AI', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+            Text('China Admissions & Legalization Assistant', style: TextStyle(fontSize: 10, color: Colors.grey)),
           ],
         ),
         actions: [
           IconButton(icon: const Icon(Icons.add, color: Color(0xFFD97706)), tooltip: 'New Chat', onPressed: () => _startNewChat()),
-          IconButton(icon: const Icon(Icons.logout, size: 18, color: Colors.grey), onPressed: widget.onLogout),
         ],
       ),
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            UserAccountsDrawerHeader(
-              decoration: const BoxDecoration(color: Color(0xFF0F172A)),
-              accountName: const Text('AOOR AI Assistant'),
-              accountEmail: Text(widget.userEmail),
-              currentAccountPicture: CircleAvatar(backgroundColor: const Color(0xFFD97706), child: const Text('AO', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold))),
+            const UserAccountsDrawerHeader(
+              decoration: BoxDecoration(color: Color(0xFF0F172A)),
+              accountName: Text('AOOR AI Assistant'),
+              accountEmail: Text('Expert Guidance for Students'),
+              currentAccountPicture: CircleAvatar(backgroundColor: Color(0xFFD97706), child: Text('AO', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold))),
             ),
             ListTile(
               leading: const Icon(Icons.add_comment_rounded, color: Color(0xFFD97706)),
@@ -360,11 +202,13 @@ class _ChatScreenState extends State<ChatScreen> {
               scrollDirection: Axis.horizontal, 
               padding: const EdgeInsets.symmetric(horizontal: 8), 
               children: [
-                ActionChip(label: const Text('Belt & Road', style: TextStyle(fontSize: 11)), onPressed: () => _send(custom: 'Tell me about Belt and Road scholarship.')),
+                ActionChip(label: const Text('Scholarships', style: TextStyle(fontSize: 11)), onPressed: () => _send(custom: 'Tell me about Chinese government and university scholarships.')),
                 const SizedBox(width: 6),
-                ActionChip(label: const Text('Legalization', style: TextStyle(fontSize: 11)), onPressed: () => _send(custom: 'What are Nigerian document authentication steps?')),
+                ActionChip(label: const Text('Admissions', style: TextStyle(fontSize: 11)), onPressed: () => _send(custom: 'What are the steps for Chinese university admissions?')),
                 const SizedBox(width: 6),
-                ActionChip(label: const Text('Robotics', style: TextStyle(fontSize: 11)), onPressed: () => _send(custom: 'List top robotics engineering schools in China.')),
+                ActionChip(label: const Text('Visa Processing', style: TextStyle(fontSize: 11)), onPressed: () => _send(custom: 'Guide me through Chinese student visa processing.')),
+                const SizedBox(width: 6),
+                ActionChip(label: const Text('Legalization', style: TextStyle(fontSize: 11)), onPressed: () => _send(custom: 'Explain document authentication, legalization, and notarization for China.')),
               ],
             ),
           ),
@@ -378,18 +222,10 @@ class _ChatScreenState extends State<ChatScreen> {
               const Spacer(),
               TextButton(onPressed: _stop, child: const Text('Stop', style: TextStyle(color: Colors.red, fontSize: 11)))
             ])),
-          if (_file != null)
-            Container(color: Colors.amber.shade50, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), child: Row(children: [
-              const Icon(Icons.attach_file, size: 14, color: Color(0xFFD97706)),
-              const SizedBox(width: 6),
-              Expanded(child: Text('Attached File: $_file', style: const TextStyle(fontSize: 11))),
-              IconButton(icon: const Icon(Icons.close, size: 14), onPressed: () => setState(() => _file = null))
-            ])),
           Container(
             padding: const EdgeInsets.all(8), color: Colors.white,
             child: Row(children: [
-              IconButton(icon: const Icon(Icons.attach_file_rounded, color: Color(0xFF0F172A)), onPressed: _pickFile),
-              Expanded(child: TextField(controller: _ctrl, decoration: const InputDecoration(hintText: 'Ask anything...', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 8)))),
+              Expanded(child: TextField(controller: _ctrl, decoration: const InputDecoration(hintText: 'Ask anything about China admissions & legalization...', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 8)))),
               CircleAvatar(radius: 18, backgroundColor: const Color(0xFF0F172A), child: IconButton(icon: const Icon(Icons.send_rounded, color: Color(0xFFD97706), size: 16), onPressed: () => _send()))
             ]),
           )
@@ -410,7 +246,6 @@ class _ChatScreenState extends State<ChatScreen> {
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (msg.attachment != null) Text('File: ${msg.attachment}', style: const TextStyle(fontSize: 10, color: Color(0xFFD97706), fontWeight: FontWeight.bold)),
           Text(msg.text, style: TextStyle(color: msg.isUser ? Colors.white : Colors.black87, fontSize: 13)),
           if (msg.isUser) GestureDetector(onTap: () => _edit(i), child: const Align(alignment: Alignment.centerRight, child: Text('Edit', style: TextStyle(color: Color(0xFFD97706), fontSize: 9, decoration: TextDecoration.underline)))),
         ]),
