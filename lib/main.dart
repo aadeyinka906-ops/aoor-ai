@@ -1,7 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:google_generative_ai/google_generative_ai.dart';
 
 void main() => runApp(const MyApp());
 
@@ -47,7 +46,6 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<ChatSession> _savedChats = [];
   List<Message> _msgs = [];
   bool _loading = false;
-  StreamSubscription? _sub;
 
   static const String _apiKey = String.fromEnvironment('GEMINI_API_KEY');
 
@@ -61,7 +59,6 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _ctrl.dispose();
     _scroll.dispose();
-    _sub?.cancel();
     super.dispose();
   }
 
@@ -93,7 +90,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _stop() {
-    _sub?.cancel();
     setState(() => _loading = false);
   }
 
@@ -114,33 +110,18 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollDown();
 
     try {
-      final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent');
-      final req = http.Request('POST', url)
-        ..headers['Content-Type'] = 'application/json'
-        ..headers['x-goog-api-key'] = _apiKey
-        ..body = jsonEncode({
-          "contents": [{
-            "parts": [{
-              "text": "You are AOOR AI, an expert consultant guiding students through Chinese scholarships, university admissions, student visa processing, and Nigerian document authentication, legalization, and notarization. No markdown asterisks. Query: $text"
-            }]
-          }]
-        });
+      final model = GenerativeModel(
+        model: 'gemini-1.5-flash',
+        apiKey: _apiKey,
+        systemInstruction: Content.system(
+          "You are AOOR AI, an expert consultant guiding students strictly through Chinese scholarships, university admissions, student visa processing, and Nigerian document authentication, legalization, and notarization. Never use markdown asterisks."
+        ),
+      );
 
-      final streamed = await req.send();
-      _sub = streamed.stream.listen((_) {});
-      final res = await http.Response.fromStream(streamed);
+      final content = [Content.text(text)];
+      final response = await model.generateContent(content);
 
-      String reply = "Error connecting to AI.";
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['candidates'] != null && data['candidates'].isNotEmpty) {
-          reply = data['candidates'][0]['content']['parts'][0]['text'].replaceAll('*', '');
-        } else {
-          reply = "No response generated from AI.";
-        }
-      } else {
-        reply = "API Error (${res.statusCode}): Check your API key configuration.";
-      }
+      String reply = response.text?.replaceAll('*', '') ?? "No response generated from AI.";
 
       if (!mounted) return;
       setState(() {
@@ -148,7 +129,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _loading = false;
       });
       _scrollDown();
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
