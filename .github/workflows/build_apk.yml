@@ -31,9 +31,10 @@ jobs:
           flutter create temp_project --platforms=android --project-name=aoor_ai
           cp -r temp_project/android ./
           rm -rf temp_project
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
 
       - name: Build APK Release
-        run: flutter build apk --release --dart-define=GEMINI_API_KEY=${{secrets.GEMINI_API_KEY}}
+        run: flutter build apk --release --dart-define=GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
