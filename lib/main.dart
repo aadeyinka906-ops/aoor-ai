@@ -64,18 +64,21 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _startNewChat({bool initial = false}) {
     if (_msgs.isNotEmpty && !initial) {
-      _savedChats.add(ChatSession(title: _msgs.first.text, messages: List.from(_msgs)));
+      _savedChats.add(ChatSession(
+        title: _msgs.firstWhere((m) => m.isUser, orElse: () => _msgs.first).text,
+        messages: List.from(_msgs),
+      ));
     }
     setState(() {
       _msgs = [
         Message(
           text: "Ni Hao! Welcome to AOOR AI.\n\n"
-                "I am your dedicated expert assistant strictly designed to guide you through:\n"
-                "• Chinese Government & University Scholarships\n"
-                "• University Admissions & Application Procedures\n"
-                "• Student Visa Processing\n"
-                "• Nigerian Document Authentication, Legalization & Notarization\n\n"
-                "How can I assist with your study-abroad journey today?",
+              "I am your dedicated expert assistant for:\n"
+              "• Chinese Government & University Scholarships\n"
+              "• University Admissions & Application Procedures\n"
+              "• Student Visa Processing (X1 & X2)\n"
+              "• Nigerian Document Authentication, Legalization & Notarization\n\n"
+              "How can I assist with your study-abroad journey today?",
           isUser: false,
         )
       ];
@@ -102,30 +105,95 @@ class _ChatScreenState extends State<ChatScreen> {
         _msgs[editIdx].text = text;
       } else {
         _msgs.add(Message(text: text, isUser: true));
-        if (custom == null) { _ctrl.clear(); }
+        if (custom == null) _ctrl.clear();
       }
       _loading = true;
     });
 
     _scrollDown();
 
+    // Temporary message that will be updated with streaming text
+    final aiMsg = Message(text: '', isUser: false);
+    setState(() {
+      _msgs.add(aiMsg);
+    });
+
     try {
       final model = GenerativeModel(
-        model: 'gemini-3.5-flash-lite',
+        model: 'gemini-3.5-flash-lite', // Best balance of speed + fewer 503 errors
         apiKey: _apiKey,
         systemInstruction: Content.system(
-          "You are AOOR AI, an expert consultant guiding students strictly through Chinese scholarships, university admissions, student visa processing, and Nigerian document authentication, legalization, and notarization. Never use markdown asterisks."
+          '''
+You are AOOR AI — a professional, friendly, and highly knowledgeable consultant specializing in studying in China.
+
+Your expertise covers:
+- Chinese Government Scholarship (CSC) and university scholarships
+- University admissions (Bachelor, Master, PhD)
+- Student visa (X1 and X2) application process
+- Nigerian document authentication, legalization, and notarization for China
+
+IMPORTANT BEHAVIOR RULES:
+1. Do NOT introduce yourself in every response. Only greet once at the beginning of a new conversation.
+2. Answer the user's actual question thoroughly and clearly. Do not force the conversation back to document legalization unless the user asks about it.
+3. Give detailed, structured answers. Break complex topics into clear steps or sections.
+4. When mentioning phone numbers, emails, or websites, write them cleanly and correctly (example: +86 10 6609 6933 or studyinchina.edu.cn).
+5. Be helpful, professional, and direct. Avoid unnecessary fluff.
+6. Never use markdown asterisks (*) in your responses.
+7. If the user asks a specific question, stay focused on that question.
+''',
         ),
       );
 
-      final content = [Content.text(text)];
-      final response = await model.generateContent(content);
+      const maxRetries = 4;
+      int attempt = 0;
+      String finalReply = '';
 
-      String reply = response.text?.replaceAll('*', '') ?? "No response generated from AI.";
+      while (attempt < maxRetries) {
+        try {
+          final content = [Content.text(text)];
+          final responseStream = model.generateContentStream(content);
+
+          final buffer = StringBuffer();
+
+          await for (final chunk in responseStream) {
+            if (!mounted || !_loading) break;
+
+            final chunkText = chunk.text ?? '';
+            buffer.write(chunkText);
+
+            setState(() {
+              aiMsg.text = buffer.toString().replaceAll('*', '');
+            });
+            _scrollDown();
+          }
+
+          finalReply = buffer.toString().replaceAll('*', '');
+          break; // Success
+        } catch (e) {
+          attempt++;
+          final errorStr = e.toString().toLowerCase();
+
+          final isRetryable = errorStr.contains('503') ||
+              errorStr.contains('high demand') ||
+              errorStr.contains('unavailable') ||
+              errorStr.contains('overloaded');
+
+          if (!isRetryable || attempt >= maxRetries) {
+            rethrow;
+          }
+
+          // Exponential backoff: 1s → 2s → 4s → 8s
+          final waitSeconds = 1 << (attempt - 1);
+          await Future.delayed(Duration(seconds: waitSeconds));
+        }
+      }
 
       if (!mounted) return;
+
       setState(() {
-        _msgs.add(Message(text: reply, isUser: false));
+        aiMsg.text = finalReply.isNotEmpty
+            ? finalReply
+            : "Sorry, I couldn't generate a response. Please try again.";
         _loading = false;
       });
       _scrollDown();
@@ -133,7 +201,11 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _msgs.add(Message(text: "Error: ${e.toString()}", isUser: false));
+        if (_msgs.isNotEmpty && !_msgs.last.isUser) {
+          _msgs.last.text = "Error: ${e.toString()}";
+        } else {
+          _msgs.add(Message(text: "Error: ${e.toString()}", isUser: false));
+        }
       });
     }
   }
@@ -144,10 +216,23 @@ class _ChatScreenState extends State<ChatScreen> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Edit Message'),
-        content: TextField(controller: _ctrl, maxLines: 2, decoration: const InputDecoration(border: OutlineInputBorder())),
+        content: TextField(
+          controller: _ctrl,
+          maxLines: 3,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () { Navigator.pop(context); _send(editIdx: idx); }, child: const Text('Update')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _send(editIdx: idx);
+            },
+            child: const Text('Update'),
+          ),
         ],
       ),
     );
@@ -156,7 +241,11 @@ class _ChatScreenState extends State<ChatScreen> {
   void _scrollDown() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
-        _scroll.animateTo(_scroll.position.maxScrollExtent, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+        _scroll.animateTo(
+          _scroll.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
       }
     });
   }
@@ -168,8 +257,10 @@ class _ChatScreenState extends State<ChatScreen> {
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('AOOR AI', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            Text('China Admissions & Legalization Assistant', style: TextStyle(fontSize: 11, color: Colors.grey)),
+            Text('AOOR AI',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text('China Admissions & Legalization Assistant',
+                style: TextStyle(fontSize: 11, color: Colors.grey)),
           ],
         ),
         actions: [
@@ -185,7 +276,8 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             const DrawerHeader(
               decoration: BoxDecoration(color: Colors.blue),
-              child: Text('Chat History', style: TextStyle(color: Colors.white, fontSize: 20)),
+              child: Text('Chat History',
+                  style: TextStyle(color: Colors.white, fontSize: 20)),
             ),
             ListTile(
               leading: const Icon(Icons.add),
@@ -197,9 +289,10 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             const Divider(),
             ..._savedChats.map((s) => ListTile(
-              title: Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-              onTap: () => _loadSession(s),
-            )),
+                  title: Text(s.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => _loadSession(s),
+                )),
           ],
         ),
       ),
@@ -212,22 +305,30 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 ActionChip(
                   label: const Text('Scholarships'),
-                  onPressed: () => _send(custom: 'I need information about Chinese Government and university scholarships for undergraduate and master degrees.'),
+                  onPressed: () => _send(
+                      custom:
+                          'I need detailed information about Chinese Government and university scholarships for undergraduate and master degrees.'),
                 ),
                 const SizedBox(width: 8),
                 ActionChip(
                   label: const Text('Admissions'),
-                  onPressed: () => _send(custom: 'What are the university admission requirements and procedures for studying in China?'),
+                  onPressed: () => _send(
+                      custom:
+                          'What are the university admission requirements and step-by-step procedures for studying in China?'),
                 ),
                 const SizedBox(width: 8),
                 ActionChip(
                   label: const Text('Visa Processing'),
-                  onPressed: () => _send(custom: 'Guide me through Chinese student visa X1 and X2 processing requirements.'),
+                  onPressed: () => _send(
+                      custom:
+                          'Please guide me through the Chinese student visa X1 and X2 processing requirements and steps.'),
                 ),
                 const SizedBox(width: 8),
                 ActionChip(
                   label: const Text('Legalization'),
-                  onPressed: () => _send(custom: 'Explain Nigerian document authentication, legalization, and notarization steps for China.'),
+                  onPressed: () => _send(
+                      custom:
+                          'Explain the full process of Nigerian document authentication, legalization, and notarization for use in China.'),
                 ),
               ],
             ),
@@ -241,29 +342,38 @@ class _ChatScreenState extends State<ChatScreen> {
               itemBuilder: (context, idx) {
                 final m = _msgs[idx];
                 return Align(
-                  alignment: m.isUser ? Alignment.centerRight : Alignment.centerLeft,
+                  alignment:
+                      m.isUser ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
                     margin: const EdgeInsets.symmetric(vertical: 6),
-                    padding: const EdgeInsets.all(12),
-                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
+                    padding: const EdgeInsets.all(14),
+                    constraints: BoxConstraints(
+                        maxWidth: MediaQuery.of(context).size.width * 0.82),
                     decoration: BoxDecoration(
-                      color: m.isUser ? const Color(0xFF11172A) : Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
+                      color: m.isUser
+                          ? const Color(0xFF11172A)
+                          : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           m.text,
-                          style: TextStyle(color: m.isUser ? Colors.white : Colors.black87),
+                          style: TextStyle(
+                            color: m.isUser ? Colors.white : Colors.black87,
+                            height: 1.4,
+                          ),
                         ),
                         if (m.isUser) ...[
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 6),
                           GestureDetector(
                             onTap: () => _edit(idx),
                             child: const Align(
                               alignment: Alignment.bottomRight,
-                              child: Text('Edit', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                              child: Text('Edit',
+                                  style: TextStyle(
+                                      color: Colors.white70, fontSize: 11)),
                             ),
                           ),
                         ]
@@ -276,44 +386,62 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           if (_loading)
             Padding(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.symmetric(vertical: 10),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('AI is thinking... '),
+                  const Text('AI is thinking... ',
+                      style: TextStyle(color: Colors.grey)),
                   const SizedBox(width: 8),
-                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
                   const SizedBox(width: 16),
-                  TextButton(onPressed: _stop, child: const Text('Stop', style: TextStyle(color: Colors.red)))
+                  TextButton(
+                    onPressed: _stop,
+                    child: const Text('Stop',
+                        style: TextStyle(color: Colors.red)),
+                  )
                 ],
               ),
             ),
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
             decoration: BoxDecoration(
               color: Colors.white,
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, -2))],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 8,
+                  offset: const Offset(0, -2),
+                )
+              ],
             ),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _ctrl,
-                    maxLines: 2,
+                    maxLines: 3,
                     minLines: 1,
                     decoration: const InputDecoration(
-                      hintText: 'Ask anything about China admissions & legalization...',
+                      hintText:
+                          'Ask anything about China admissions & legalization...',
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 CircleAvatar(
                   backgroundColor: const Color(0xFF11172A),
-                  radius: 20,
+                  radius: 22,
                   child: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white, size: 18),
-                    onPressed: () => _send(),
+                    icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                    onPressed: _loading ? null : () => _send(),
                   ),
                 ),
               ],
