@@ -111,7 +111,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final model = GenerativeModel(
-        model: 'gemini-1.5-pro',
+        model: 'gemini-3.8-flash',
         apiKey: _apiKey,
         systemInstruction: Content.system(
           "You are AOOR AI, an expert consultant guiding students strictly through Chinese scholarships, university admissions, student visa processing, and Nigerian document authentication, legalization, and notarization. Never use markdown asterisks."
