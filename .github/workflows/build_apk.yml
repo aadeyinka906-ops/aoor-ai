@@ -20,18 +20,36 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.x'
+          flutter-version: '3.24.x'   # Using a more recent stable version
           channel: 'stable'
 
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Generate Android Scaffold
+      - name: Generate Android Scaffold + Upgrade SDK
         run: |
           flutter create temp_project --platforms=android --project-name=aoor_ai
           cp -r temp_project/android ./
           rm -rf temp_project
+
+          # Add Internet permission
           sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
+
+          # === Upgrade to modern Android SDK ===
+          # Change compileSdk
+          sed -i 's/compileSdk = .*/compileSdk = 35/' android/app/build.gradle
+          sed -i 's/compileSdkVersion .*/compileSdk 35/' android/app/build.gradle
+
+          # Change targetSdk
+          sed -i 's/targetSdk = .*/targetSdk = 35/' android/app/build.gradle
+          sed -i 's/targetSdkVersion .*/targetSdk 35/' android/app/build.gradle
+
+          # Also force minSdk to a reasonable value
+          sed -i 's/minSdk = .*/minSdk = 23/' android/app/build.gradle
+          sed -i 's/minSdkVersion .*/minSdk 23/' android/app/build.gradle
+
+          echo "===== Updated build.gradle ====="
+          cat android/app/build.gradle
 
       - name: Build APK Release
         run: |
@@ -43,4 +61,3 @@ jobs:
         with:
           name: app-release
           path: build/app/outputs/flutter-apk/app-release.apk
-          
