@@ -133,7 +133,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _msgs.add(Message(text: "Request stopped or network error.", isUser: false));
+        _msgs.add(Message(text: "Error: ${e.toString()}", isUser: false));
       });
     }
   }
