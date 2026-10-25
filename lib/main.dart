@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() => runApp(const MyApp());
 
@@ -24,13 +26,37 @@ class MyApp extends StatelessWidget {
 class Message {
   String text;
   bool isUser;
+
   Message({required this.text, required this.isUser});
+
+  Map<String, dynamic> toJson() => {
+        'text': text,
+        'isUser': isUser,
+      };
+
+  factory Message.fromJson(Map<String, dynamic> json) => Message(
+        text: json['text'] as String,
+        isUser: json['isUser'] as bool,
+      );
 }
 
 class ChatSession {
   String title;
   List<Message> messages;
+
   ChatSession({required this.title, required this.messages});
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'messages': messages.map((m) => m.toJson()).toList(),
+      };
+
+  factory ChatSession.fromJson(Map<String, dynamic> json) => ChatSession(
+        title: json['title'] as String,
+        messages: (json['messages'] as List)
+            .map((m) => Message.fromJson(m as Map<String, dynamic>))
+            .toList(),
+      );
 }
 
 class ChatScreen extends StatefulWidget {
@@ -43,16 +69,19 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _ctrl = TextEditingController();
   final ScrollController _scroll = ScrollController();
-  final List<ChatSession> _savedChats = [];
+
+  List<ChatSession> _savedChats = [];
   List<Message> _msgs = [];
   bool _loading = false;
+  bool _isLoadingChats = true;
 
   static const String _apiKey = String.fromEnvironment('GEMINI_API_KEY');
+  static const String _storageKey = 'aoor_ai_chats';
 
   @override
   void initState() {
     super.initState();
-    _startNewChat(initial: true);
+    _loadChats();
   }
 
   @override
@@ -62,13 +91,63 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  void _startNewChat({bool initial = false}) {
-    if (_msgs.isNotEmpty && !initial) {
-      _savedChats.add(ChatSession(
-        title: _msgs.firstWhere((m) => m.isUser, orElse: () => _msgs.first).text,
-        messages: List.from(_msgs),
-      ));
+  // ---------- Persistence ----------
+  Future<void> _loadChats() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? jsonString = prefs.getString(_storageKey);
+
+    if (jsonString != null && jsonString.isNotEmpty) {
+      try {
+        final List<dynamic> decoded = jsonDecode(jsonString);
+        _savedChats = decoded
+            .map((item) => ChatSession.fromJson(item as Map<String, dynamic>))
+            .toList();
+      } catch (e) {
+        // If data is corrupted, start fresh
+        _savedChats = [];
+      }
     }
+
+    // Start with a new chat if none exist
+    if (_savedChats.isEmpty) {
+      _startNewChat(initial: true);
+    } else {
+      // Load the most recent chat
+      setState(() {
+        _msgs = List.from(_savedChats.last.messages);
+      });
+    }
+
+    setState(() {
+      _isLoadingChats = false;
+    });
+  }
+
+  Future<void> _saveChats() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String encoded =
+        jsonEncode(_savedChats.map((c) => c.toJson()).toList());
+    await prefs.setString(_storageKey, encoded);
+  }
+
+  // ---------- Chat management ----------
+  void _startNewChat({bool initial = false}) {
+    // Save current chat before starting a new one
+    if (_msgs.isNotEmpty && !initial) {
+      final title = _msgs
+          .firstWhere((m) => m.isUser, orElse: () => _msgs.first)
+          .text;
+
+      // Avoid saving empty or duplicate sessions
+      if (title.trim().isNotEmpty) {
+        _savedChats.add(ChatSession(
+          title: title.length > 40 ? '${title.substring(0, 40)}...' : title,
+          messages: List.from(_msgs),
+        ));
+        _saveChats();
+      }
+    }
+
     setState(() {
       _msgs = [
         Message(
@@ -86,10 +165,35 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _loadSession(ChatSession session) {
+    // Save current chat first
+    if (_msgs.isNotEmpty) {
+      final title = _msgs
+          .firstWhere((m) => m.isUser, orElse: () => _msgs.first)
+          .text;
+      if (title.trim().isNotEmpty) {
+        // Update existing or add new
+        final existingIndex = _savedChats.indexWhere((c) => c.title == session.title);
+        if (existingIndex != -1) {
+          _savedChats[existingIndex] = ChatSession(
+            title: session.title,
+            messages: List.from(_msgs),
+          );
+        }
+        _saveChats();
+      }
+    }
+
     setState(() {
       _msgs = List.from(session.messages);
     });
     Navigator.pop(context);
+  }
+
+  void _deleteSession(int index) {
+    setState(() {
+      _savedChats.removeAt(index);
+    });
+    _saveChats();
   }
 
   void _stop() {
@@ -112,7 +216,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _scrollDown();
 
-    // Temporary message that will be updated with streaming text
     final aiMsg = Message(text: '', isUser: false);
     setState(() {
       _msgs.add(aiMsg);
@@ -120,7 +223,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final model = GenerativeModel(
-        model: 'gemini-3.5-flash-lite', // Best balance of speed + fewer 503 errors
+        model: 'gemini-3.5-flash-lite',
         apiKey: _apiKey,
         systemInstruction: Content.system(
           '''
@@ -168,7 +271,7 @@ IMPORTANT BEHAVIOR RULES:
           }
 
           finalReply = buffer.toString().replaceAll('*', '');
-          break; // Success
+          break;
         } catch (e) {
           attempt++;
           final errorStr = e.toString().toLowerCase();
@@ -182,7 +285,6 @@ IMPORTANT BEHAVIOR RULES:
             rethrow;
           }
 
-          // Exponential backoff: 1s → 2s → 4s → 8s
           final waitSeconds = 1 << (attempt - 1);
           await Future.delayed(Duration(seconds: waitSeconds));
         }
@@ -197,6 +299,9 @@ IMPORTANT BEHAVIOR RULES:
         _loading = false;
       });
       _scrollDown();
+
+      // Auto-save after every successful reply
+      _autoSaveCurrentChat();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -208,6 +313,34 @@ IMPORTANT BEHAVIOR RULES:
         }
       });
     }
+  }
+
+  void _autoSaveCurrentChat() {
+    if (_msgs.length <= 1) return; // only welcome message
+
+    final title = _msgs
+        .firstWhere((m) => m.isUser, orElse: () => _msgs.first)
+        .text;
+
+    final shortTitle =
+        title.length > 40 ? '${title.substring(0, 40)}...' : title;
+
+    // Check if this chat already exists in history
+    final existingIndex = _savedChats.indexWhere((c) => c.title == shortTitle);
+
+    if (existingIndex != -1) {
+      _savedChats[existingIndex] = ChatSession(
+        title: shortTitle,
+        messages: List.from(_msgs),
+      );
+    } else {
+      _savedChats.add(ChatSession(
+        title: shortTitle,
+        messages: List.from(_msgs),
+      ));
+    }
+
+    _saveChats();
   }
 
   void _edit(int idx) {
@@ -252,6 +385,12 @@ IMPORTANT BEHAVIOR RULES:
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoadingChats) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Column(
@@ -288,11 +427,25 @@ IMPORTANT BEHAVIOR RULES:
               },
             ),
             const Divider(),
-            ..._savedChats.map((s) => ListTile(
-                  title: Text(s.title,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  onTap: () => _loadSession(s),
-                )),
+            if (_savedChats.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('No saved chats yet',
+                    style: TextStyle(color: Colors.grey)),
+              ),
+            ..._savedChats.asMap().entries.map((entry) {
+              final index = entry.key;
+              final s = entry.value;
+              return ListTile(
+                title: Text(s.title,
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  onPressed: () => _deleteSession(index),
+                ),
+                onTap: () => _loadSession(s),
+              );
+            }),
           ],
         ),
       ),
