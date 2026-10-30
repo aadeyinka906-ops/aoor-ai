@@ -287,6 +287,63 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
+class SettingsPage extends StatelessWidget {
+  const SettingsPage({super.key});
+
+  Future<void> logout(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    if (!context.mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LandingPage()),
+      (route) => false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Settings')),
+      body: ListView(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.logout),
+            title: const Text('Logout'),
+            onTap: () => logout(context),
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete_forever, color: Colors.red),
+            title: const Text('Delete Account', style: TextStyle(color: Colors.red)),
+            onTap: () {
+              showDialog(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: const Text('Delete Account?'),
+                  content: const Text('This will permanently delete your account data.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        logout(context);
+                      },
+                      child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
   @override
@@ -322,19 +379,19 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  Future<void> sendMessage() async {
-    final text = ctrl.text.trim();
+  Future<void> sendMessage({String? customText}) async {
+    final text = customText ?? ctrl.text.trim();
     if (text.isEmpty) return;
 
     setState(() {
       messages.add(Message(text: text, isUser: true));
-      ctrl.clear();
+      if (customText == null) ctrl.clear();
       loading = true;
     });
 
     try {
       final model = GenerativeModel(
-        model: 'gemini-1.5-flash',
+        model: 'gemini-3.8-flash-lite',
         apiKey: apiKey,
         systemInstruction: Content.system(
           '''
@@ -383,17 +440,6 @@ Rules:
     }
   }
 
-  Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    if (!mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LandingPage()),
-      (route) => false,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -415,8 +461,13 @@ Rules:
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: logout,
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsPage()),
+              );
+            },
           ),
         ],
       ),
@@ -451,6 +502,42 @@ Rules:
                             height: 1.4,
                           ),
                         ),
+                        if (m.isUser)
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: () {
+                                ctrl.text = m.text;
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => AlertDialog(
+                                    title: const Text('Edit Message'),
+                                    content: TextField(
+                                      controller: ctrl,
+                                      maxLines: 3,
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          sendMessage(customText: ctrl.text.trim());
+                                        },
+                                        child: const Text('Update'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                              child: const Text(
+                                'Edit',
+                                style: TextStyle(fontSize: 12, color: Colors.white70),
+                              ),
+                            ),
+                          ),
                         if (!m.isUser)
                           Align(
                             alignment: Alignment.centerRight,
@@ -503,7 +590,7 @@ Rules:
                 ),
                 IconButton(
                   icon: const Icon(Icons.send, color: Color(0xFF1E88E5)),
-                  onPressed: loading ? null : sendMessage,
+                  onPressed: loading ? null : () => sendMessage(),
                 ),
               ],
             ),
