@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-void main() => runApp(const MyApp());
+void main() {
+  runApp(const MyApp());
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -13,52 +16,416 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'AOOR AI',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        scaffoldBackgroundColor: Colors.white,
-      ),
-      home: const ChatScreen(),
       debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primaryColor: const Color(0xFF0A2540),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0A2540)),
+        useMaterial3: true,
+      ),
+      home: const AuthWrapper(),
     );
   }
 }
 
+// ==================== MODELS ====================
 class Message {
   String text;
   bool isUser;
+  String id;
 
-  Message({required this.text, required this.isUser});
+  Message({required this.text, required this.isUser, String? id})
+      : id = id ?? DateTime.now().millisecondsSinceEpoch.toString();
 
   Map<String, dynamic> toJson() => {
         'text': text,
         'isUser': isUser,
+        'id': id,
       };
 
   factory Message.fromJson(Map<String, dynamic> json) => Message(
-        text: json['text'] as String,
-        isUser: json['isUser'] as bool,
+        text: json['text'],
+        isUser: json['isUser'],
+        id: json['id'],
       );
 }
 
 class ChatSession {
+  String id;
   String title;
   List<Message> messages;
 
-  ChatSession({required this.title, required this.messages});
+  ChatSession({
+    required this.id,
+    required this.title,
+    required this.messages,
+  });
 
   Map<String, dynamic> toJson() => {
+        'id': id,
         'title': title,
         'messages': messages.map((m) => m.toJson()).toList(),
       };
 
   factory ChatSession.fromJson(Map<String, dynamic> json) => ChatSession(
-        title: json['title'] as String,
+        id: json['id'],
+        title: json['title'],
         messages: (json['messages'] as List)
-            .map((m) => Message.fromJson(m as Map<String, dynamic>))
+            .map((m) => Message.fromJson(m))
             .toList(),
       );
 }
 
+// ==================== AUTH WRAPPER ====================
+class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  bool _loading = true;
+  bool _isLoggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLogin();
+  }
+
+  Future<void> _checkLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    final name = prefs.getString('user_name');
+    setState(() {
+      _isLoggedIn = name != null && name.isNotEmpty;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    return _isLoggedIn ? const ChatScreen() : const LandingPage();
+  }
+}
+
+// ==================== LANDING PAGE ====================
+class LandingPage extends StatelessWidget {
+  const LandingPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            children: [
+              const Spacer(),
+              Image.asset('logo.png', width: 130, height: 130),
+              const SizedBox(height: 20),
+              const Text(
+                'AOOR AI',
+                style: TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0A2540),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Your Guide to Studying in China',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+              const SizedBox(height: 36),
+              const Text(
+                'Helping Nigerian students with:\n\n'
+                '• University Admissions\n'
+                '• Scholarships (CSC & others)\n'
+                '• Student Visa Guidance\n'
+                '• Document Legalization\n'
+                '• Maths solutions & Exam prep',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 15, height: 1.6),
+              ),
+              const Spacer(),
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0A2540),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SignUpPage()),
+                    );
+                  },
+                  child: const Text(
+                    'Get Started',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginPage()),
+                  );
+                },
+                child: const Text(
+                  'Already have an account? Sign In',
+                  style: TextStyle(color: Color(0xFF0A2540)),
+                ),
+              ),
+              const SizedBox(height: 30),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== SIGN UP PAGE ====================
+class SignUpPage extends StatefulWidget {
+  const SignUpPage({super.key});
+
+  @override
+  State<SignUpPage> createState() => _SignUpPageState();
+}
+
+class _SignUpPageState extends State<SignUpPage> {
+  final nameCtrl = TextEditingController();
+  final emailCtrl = TextEditingController();
+  bool loading = false;
+
+  Future<void> _signUp() async {
+    if (nameCtrl.text.trim().isEmpty || emailCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill all fields')),
+      );
+      return;
+    }
+
+    setState(() => loading = true);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_name', nameCtrl.text.trim());
+    await prefs.setString('user_email', emailCtrl.text.trim());
+
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const ChatScreen()),
+      (route) => false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Create Account')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Full Name',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person_outline),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailCtrl,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Email Address',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.email_outlined),
+              ),
+            ),
+            const SizedBox(height: 30),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0A2540),
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: loading ? null : _signUp,
+                child: loading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text('Create Account'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== LOGIN PAGE ====================
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final emailCtrl = TextEditingController();
+  bool loading = false;
+
+  Future<void> _login() async {
+    if (emailCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter your email')),
+      );
+      return;
+    }
+
+    setState(() => loading = true);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_name', 'User');
+    await prefs.setString('user_email', emailCtrl.text.trim());
+
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const ChatScreen()),
+      (route) => false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Sign In')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            TextField(
+              controller: emailCtrl,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Email Address',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.email_outlined),
+              ),
+            ),
+            const SizedBox(height: 30),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0A2540),
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: loading ? null : _login,
+                child: loading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text('Sign In'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== SETTINGS PAGE ====================
+class SettingsPage extends StatelessWidget {
+  const SettingsPage({super.key});
+
+  Future<void> _logout(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('user_name');
+    await prefs.remove('user_email');
+
+    if (!context.mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LandingPage()),
+      (route) => false,
+    );
+  }
+
+  Future<void> _deleteAccount(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+
+    if (!context.mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LandingPage()),
+      (route) => false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Settings')),
+      body: ListView(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.logout),
+            title: const Text('Logout'),
+            onTap: () => _logout(context),
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete_forever, color: Colors.red),
+            title: const Text('Delete Account', style: TextStyle(color: Colors.red)),
+            onTap: () {
+              showDialog(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: const Text('Delete Account?'),
+                  content: const Text('This will permanently delete your data.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _deleteAccount(context);
+                      },
+                      child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== CHAT SCREEN ====================
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
 
@@ -73,302 +440,139 @@ class _ChatScreenState extends State<ChatScreen> {
   List<ChatSession> _savedChats = [];
   List<Message> _msgs = [];
   bool _loading = false;
-  bool _isLoadingChats = true;
+  String _userName = 'User';
 
   static const String _apiKey = String.fromEnvironment('GEMINI_API_KEY');
-  static const String _storageKey = 'aoor_ai_chats';
 
   @override
   void initState() {
     super.initState();
-    _loadChats();
+    _loadData();
   }
 
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  // ---------- Persistence ----------
-  Future<void> _loadChats() async {
+  Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
-    final String? jsonString = prefs.getString(_storageKey);
+    _userName = prefs.getString('user_name') ?? 'User';
 
-    if (jsonString != null && jsonString.isNotEmpty) {
-      try {
-        final List<dynamic> decoded = jsonDecode(jsonString);
-        _savedChats = decoded
-            .map((item) => ChatSession.fromJson(item as Map<String, dynamic>))
-            .toList();
-      } catch (e) {
-        // If data is corrupted, start fresh
-        _savedChats = [];
-      }
+    final data = prefs.getString('chats');
+    if (data != null) {
+      final list = jsonDecode(data) as List;
+      _savedChats = list.map((e) => ChatSession.fromJson(e)).toList();
     }
 
-    // Start with a new chat if none exist
-    if (_savedChats.isEmpty) {
-      _startNewChat(initial: true);
+    if (_savedChats.isNotEmpty) {
+      _msgs = List.from(_savedChats.last.messages);
     } else {
-      // Load the most recent chat
-      setState(() {
-        _msgs = List.from(_savedChats.last.messages);
-      });
+      _startNewChat(initial: true);
     }
-
-    setState(() {
-      _isLoadingChats = false;
-    });
+    setState(() {});
   }
 
   Future<void> _saveChats() async {
     final prefs = await SharedPreferences.getInstance();
-    final String encoded =
-        jsonEncode(_savedChats.map((c) => c.toJson()).toList());
-    await prefs.setString(_storageKey, encoded);
+    await prefs.setString(
+      'chats',
+      jsonEncode(_savedChats.map((e) => e.toJson()).toList()),
+    );
   }
 
-  // ---------- Chat management ----------
   void _startNewChat({bool initial = false}) {
-    // Save current chat before starting a new one
-    if (_msgs.isNotEmpty && !initial) {
-      final title = _msgs
-          .firstWhere((m) => m.isUser, orElse: () => _msgs.first)
-          .text;
-
-      // Avoid saving empty or duplicate sessions
-      if (title.trim().isNotEmpty) {
-        _savedChats.add(ChatSession(
-          title: title.length > 40 ? '${title.substring(0, 40)}...' : title,
-          messages: List.from(_msgs),
-        ));
-        _saveChats();
-      }
+    if (!initial && _msgs.length > 1) {
+      final title = _msgs.firstWhere((m) => m.isUser, orElse: () => _msgs.first).text;
+      _savedChats.add(ChatSession(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: title.length > 40 ? '${title.substring(0, 40)}...' : title,
+        messages: List.from(_msgs),
+      ));
+      _saveChats();
     }
 
     setState(() {
       _msgs = [
         Message(
-          text: "Ni Hao! Welcome to AOOR AI.\n\n"
-              "I am your dedicated expert assistant for:\n"
-              "• Chinese Government & University Scholarships\n"
-              "• University Admissions & Application Procedures\n"
-              "• Student Visa Processing (X1 & X2)\n"
-              "• Nigerian Document Authentication, Legalization & Notarization\n\n"
-              "How can I assist with your study-abroad journey today?",
+          text: "Ni Hao $_userName! 👋\n\nI'm AOOR AI — your guide for studying in China.\n\nI can help you with admissions, scholarships, visa, document legalization, maths problems, and exam preparation.\n\nHow can I assist you today?",
           isUser: false,
         )
       ];
     });
   }
 
-  void _loadSession(ChatSession session) {
-    // Save current chat first
-    if (_msgs.isNotEmpty) {
-      final title = _msgs
-          .firstWhere((m) => m.isUser, orElse: () => _msgs.first)
-          .text;
-      if (title.trim().isNotEmpty) {
-        // Update existing or add new
-        final existingIndex = _savedChats.indexWhere((c) => c.title == session.title);
-        if (existingIndex != -1) {
-          _savedChats[existingIndex] = ChatSession(
-            title: session.title,
-            messages: List.from(_msgs),
-          );
-        }
-        _saveChats();
-      }
-    }
-
-    setState(() {
-      _msgs = List.from(session.messages);
-    });
-    Navigator.pop(context);
-  }
-
-  void _deleteSession(int index) {
-    setState(() {
-      _savedChats.removeAt(index);
-    });
-    _saveChats();
-  }
-
-  void _stop() {
-    setState(() => _loading = false);
-  }
-
-  Future<void> _send({String? custom, int? editIdx}) async {
+  Future<void> _send({String? custom, int? editIndex}) async {
     final text = custom ?? _ctrl.text.trim();
     if (text.isEmpty) return;
 
     setState(() {
-      if (editIdx != null) {
-        _msgs[editIdx].text = text;
+      if (editIndex != null) {
+        _msgs[editIndex].text = text;
       } else {
         _msgs.add(Message(text: text, isUser: true));
-        if (custom == null) _ctrl.clear();
       }
+      _ctrl.clear();
       _loading = true;
     });
-
     _scrollDown();
 
     final aiMsg = Message(text: '', isUser: false);
-    setState(() {
-      _msgs.add(aiMsg);
-    });
+    setState(() => _msgs.add(aiMsg));
 
     try {
       final model = GenerativeModel(
-        model: 'gemini-3.5-flash-lite',
+        model: 'gemini-2.0-flash',
         apiKey: _apiKey,
         systemInstruction: Content.system(
           '''
-You are AOOR AI — a professional, friendly, and highly knowledgeable consultant specializing in studying in China.
+You are AOOR AI, a helpful expert assistant for Nigerian students who want to study in China.
 
-Your expertise covers:
-- Chinese Government Scholarship (CSC) and university scholarships
-- University admissions (Bachelor, Master, PhD)
-- Student visa (X1 and X2) application process
-- Nigerian document authentication, legalization, and notarization for China
+You help with:
+- Chinese university admissions
+- Scholarships (CSC, university, Belt & Road)
+- Student visa (X1 & X2)
+- Nigerian document legalization
+- Solving mathematics equations step-by-step
+- CSSA / scholarship exam preparation questions
 
-IMPORTANT BEHAVIOR RULES:
-1. Do NOT introduce yourself in every response. Only greet once at the beginning of a new conversation.
-2. Answer the user's actual question thoroughly and clearly. Do not force the conversation back to document legalization unless the user asks about it.
-3. Give detailed, structured answers. Break complex topics into clear steps or sections.
-4. When mentioning phone numbers, emails, or websites, write them cleanly and correctly (example: +86 10 6609 6933 or studyinchina.edu.cn).
-5. Be helpful, professional, and direct. Avoid unnecessary fluff.
-6. Never use markdown asterisks (*) in your responses.
-7. If the user asks a specific question, stay focused on that question.
+Rules:
+- Be clear, structured and helpful
+- Do not introduce yourself in every message
+- When solving maths, show step-by-step working
+- Never use markdown asterisks (*)
 ''',
         ),
       );
 
-      const maxRetries = 4;
-      int attempt = 0;
-      String finalReply = '';
-
-      while (attempt < maxRetries) {
-        try {
-          final content = [Content.text(text)];
-          final responseStream = model.generateContentStream(content);
-
-          final buffer = StringBuffer();
-
-          await for (final chunk in responseStream) {
-            if (!mounted || !_loading) break;
-
-            final chunkText = chunk.text ?? '';
-            buffer.write(chunkText);
-
-            setState(() {
-              aiMsg.text = buffer.toString().replaceAll('*', '');
-            });
-            _scrollDown();
-          }
-
-          finalReply = buffer.toString().replaceAll('*', '');
-          break;
-        } catch (e) {
-          attempt++;
-          final errorStr = e.toString().toLowerCase();
-
-          final isRetryable = errorStr.contains('503') ||
-              errorStr.contains('high demand') ||
-              errorStr.contains('unavailable') ||
-              errorStr.contains('overloaded');
-
-          if (!isRetryable || attempt >= maxRetries) {
-            rethrow;
-          }
-
-          final waitSeconds = 1 << (attempt - 1);
-          await Future.delayed(Duration(seconds: waitSeconds));
-        }
-      }
-
-      if (!mounted) return;
+      final response = await model.generateContent([Content.text(text)]);
+      final reply = response.text?.replaceAll('*', '') ?? 'No response generated.';
 
       setState(() {
-        aiMsg.text = finalReply.isNotEmpty
-            ? finalReply
-            : "Sorry, I couldn't generate a response. Please try again.";
+        aiMsg.text = reply;
         _loading = false;
       });
       _scrollDown();
-
-      // Auto-save after every successful reply
-      _autoSaveCurrentChat();
+      _autoSave();
     } catch (e) {
-      if (!mounted) return;
       setState(() {
+        aiMsg.text = 'Error: $e';
         _loading = false;
-        if (_msgs.isNotEmpty && !_msgs.last.isUser) {
-          _msgs.last.text = "Error: ${e.toString()}";
-        } else {
-          _msgs.add(Message(text: "Error: ${e.toString()}", isUser: false));
-        }
       });
     }
   }
 
-  void _autoSaveCurrentChat() {
-    if (_msgs.length <= 1) return; // only welcome message
+  void _autoSave() {
+    if (_msgs.length <= 1) return;
+    final title = _msgs.firstWhere((m) => m.isUser).text;
+    final shortTitle = title.length > 40 ? '${title.substring(0, 40)}...' : title;
 
-    final title = _msgs
-        .firstWhere((m) => m.isUser, orElse: () => _msgs.first)
-        .text;
-
-    final shortTitle =
-        title.length > 40 ? '${title.substring(0, 40)}...' : title;
-
-    // Check if this chat already exists in history
-    final existingIndex = _savedChats.indexWhere((c) => c.title == shortTitle);
-
-    if (existingIndex != -1) {
-      _savedChats[existingIndex] = ChatSession(
-        title: shortTitle,
-        messages: List.from(_msgs),
-      );
+    final existing = _savedChats.indexWhere((c) => c.title == shortTitle);
+    if (existing >= 0) {
+      _savedChats[existing].messages = List.from(_msgs);
     } else {
       _savedChats.add(ChatSession(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
         title: shortTitle,
         messages: List.from(_msgs),
       ));
     }
-
     _saveChats();
-  }
-
-  void _edit(int idx) {
-    _ctrl.text = _msgs[idx].text;
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Edit Message'),
-        content: TextField(
-          controller: _ctrl,
-          maxLines: 3,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _send(editIdx: idx);
-            },
-            child: const Text('Update'),
-          ),
-        ],
-      ),
-    );
   }
 
   void _scrollDown() {
@@ -376,30 +580,29 @@ IMPORTANT BEHAVIOR RULES:
       if (_scroll.hasClients) {
         _scroll.animateTo(
           _scroll.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 250),
+          duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
       }
     });
   }
 
+  void _copyText(String text) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Copied to clipboard')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_isLoadingChats) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            Text('AOOR AI',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            Text('China Admissions & Legalization Assistant',
-                style: TextStyle(fontSize: 11, color: Colors.grey)),
+            Image.asset('logo.png', height: 32),
+            const SizedBox(width: 10),
+            const Text('AOOR AI'),
           ],
         ),
         actions: [
@@ -407,16 +610,31 @@ IMPORTANT BEHAVIOR RULES:
             icon: const Icon(Icons.add),
             onPressed: () => _startNewChat(),
           ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsPage()),
+              );
+            },
+          ),
         ],
       ),
       drawer: Drawer(
         child: ListView(
-          padding: EdgeInsets.zero,
           children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(color: Colors.blue),
-              child: Text('Chat History',
-                  style: TextStyle(color: Colors.white, fontSize: 20)),
+            DrawerHeader(
+              decoration: const BoxDecoration(color: Color(0xFF0A2540)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Chat History',
+                      style: TextStyle(color: Colors.white, fontSize: 20)),
+                  const SizedBox(height: 8),
+                  Text(_userName, style: const TextStyle(color: Colors.white70)),
+                ],
+              ),
             ),
             ListTile(
               leading: const Icon(Icons.add),
@@ -427,23 +645,22 @@ IMPORTANT BEHAVIOR RULES:
               },
             ),
             const Divider(),
-            if (_savedChats.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('No saved chats yet',
-                    style: TextStyle(color: Colors.grey)),
-              ),
-            ..._savedChats.asMap().entries.map((entry) {
-              final index = entry.key;
-              final s = entry.value;
+            ..._savedChats.map((chat) {
               return ListTile(
-                title: Text(s.title,
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                title: Text(chat.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete_outline, size: 20),
-                  onPressed: () => _deleteSession(index),
+                  onPressed: () {
+                    setState(() {
+                      _savedChats.removeWhere((c) => c.id == chat.id);
+                    });
+                    _saveChats();
+                  },
                 ),
-                onTap: () => _loadSession(s),
+                onTap: () {
+                  setState(() => _msgs = List.from(chat.messages));
+                  Navigator.pop(context);
+                },
               );
             }),
           ],
@@ -451,157 +668,150 @@ IMPORTANT BEHAVIOR RULES:
       ),
       body: Column(
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                ActionChip(
-                  label: const Text('Scholarships'),
-                  onPressed: () => _send(
-                      custom:
-                          'I need detailed information about Chinese Government and university scholarships for undergraduate and master degrees.'),
-                ),
-                const SizedBox(width: 8),
-                ActionChip(
-                  label: const Text('Admissions'),
-                  onPressed: () => _send(
-                      custom:
-                          'What are the university admission requirements and step-by-step procedures for studying in China?'),
-                ),
-                const SizedBox(width: 8),
-                ActionChip(
-                  label: const Text('Visa Processing'),
-                  onPressed: () => _send(
-                      custom:
-                          'Please guide me through the Chinese student visa X1 and X2 processing requirements and steps.'),
-                ),
-                const SizedBox(width: 8),
-                ActionChip(
-                  label: const Text('Legalization'),
-                  onPressed: () => _send(
-                      custom:
-                          'Explain the full process of Nigerian document authentication, legalization, and notarization for use in China.'),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
           Expanded(
             child: ListView.builder(
               controller: _scroll,
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(16),
               itemCount: _msgs.length,
-              itemBuilder: (context, idx) {
-                final m = _msgs[idx];
+              itemBuilder: (context, index) {
+                final m = _msgs[index];
                 return Align(
-                  alignment:
-                      m.isUser ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    padding: const EdgeInsets.all(14),
-                    constraints: BoxConstraints(
-                        maxWidth: MediaQuery.of(context).size.width * 0.82),
-                    decoration: BoxDecoration(
-                      color: m.isUser
-                          ? const Color(0xFF11172A)
-                          : Colors.grey[100],
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          m.text,
-                          style: TextStyle(
-                            color: m.isUser ? Colors.white : Colors.black87,
-                            height: 1.4,
-                          ),
-                        ),
-                        if (m.isUser) ...[
-                          const SizedBox(height: 6),
-                          GestureDetector(
-                            onTap: () => _edit(idx),
-                            child: const Align(
-                              alignment: Alignment.bottomRight,
-                              child: Text('Edit',
-                                  style: TextStyle(
-                                      color: Colors.white70, fontSize: 11)),
+                  alignment: m.isUser return Align(
+                    alignment: m.isUser ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(14),
+                      constraints: BoxConstraints(
+                        maxWidth: MediaQuery.of(context).size.width * 0.8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: m.isUser ? const Color(0xFF0A2540) : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            m.text,
+                            style: TextStyle(
+                              color: m.isUser ? Colors.white : Colors.black87,
+                              height: 1.4,
                             ),
                           ),
-                        ]
-                      ],
+                          if (!m.isUser) ...[
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.copy, size: 18),
+                                  onPressed: () => _copyText(m.text),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.refresh, size: 18),
+                                  onPressed: () {
+                                    final lastUser = _msgs.lastWhere((e) => e.isUser);
+                                    _send(custom: lastUser.text);
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.thumb_up_alt_outlined, size: 18),
+                                  onPressed: () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Thanks for the feedback!')),
+                                    );
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.thumb_down_alt_outlined, size: 18),
+                                  onPressed: () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Thanks, we will improve')),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                          if (m.isUser)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: () {
+                                  _ctrl.text = m.text;
+                                  showDialog(
+                                    context: context,
+                                    builder: (_) => AlertDialog(
+                                      title: const Text('Edit Message'),
+                                      content: TextField(
+                                        controller: _ctrl,
+                                        maxLines: 3,
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(context),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed: () {
+                                            Navigator.pop(context);
+                                            _send(editIndex: index);
+                                          },
+                                          child: const Text('Update'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                                child: const Text('Edit', style: TextStyle(fontSize: 12)),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(8.0),
+                child: Text('AOOR AI is thinking...'),
+              ),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _ctrl,
+                      decoration: const InputDecoration(
+                        hintText: 'Ask anything...',
+                        border: InputBorder.none,
+                      ),
+                      maxLines: 4,
+                      minLines: 1,
                     ),
                   ),
-                );
-              },
-            ),
-          ),
-          if (_loading)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('AI is thinking... ',
-                      style: TextStyle(color: Colors.grey)),
-                  const SizedBox(width: 8),
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                  IconButton(
+                    icon: const Icon(Icons.send, color: Color(0xFF0A2540)),
+                    onPressed: _loading ? null : () => _send(),
                   ),
-                  const SizedBox(width: 16),
-                  TextButton(
-                    onPressed: _stop,
-                    child: const Text('Stop',
-                        style: TextStyle(color: Colors.red)),
-                  )
                 ],
               ),
             ),
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
-                  blurRadius: 8,
-                  offset: const Offset(0, -2),
-                )
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _ctrl,
-                    maxLines: 3,
-                    minLines: 1,
-                    decoration: const InputDecoration(
-                      hintText:
-                          'Ask anything about China admissions & legalization...',
-                      border: InputBorder.none,
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                CircleAvatar(
-                  backgroundColor: const Color(0xFF11172A),
-                  radius: 22,
-                  child: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white, size: 20),
-                    onPressed: _loading ? null : () => _send(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+          ],
+        ),
+      );
   }
-}
+              }
