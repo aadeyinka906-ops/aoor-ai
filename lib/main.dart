@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
@@ -24,9 +25,37 @@ class MyApp extends StatelessWidget {
 }
 
 class Message {
-  final String text;
-  final bool isUser;
+  String text;
+  bool isUser;
   Message({required this.text, required this.isUser});
+
+  Map<String, dynamic> toJson() => {'text': text, 'isUser': isUser};
+  factory Message.fromJson(Map<String, dynamic> json) => Message(
+        text: json['text'],
+        isUser: json['isUser'],
+      );
+}
+
+class ChatSession {
+  String id;
+  String title;
+  List<Message> messages;
+
+  ChatSession({required this.id, required this.title, required this.messages});
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'messages': messages.map((m) => m.toJson()).toList(),
+      };
+
+  factory ChatSession.fromJson(Map<String, dynamic> json) => ChatSession(
+        id: json['id'],
+        title: json['title'],
+        messages: (json['messages'] as List)
+            .map((m) => Message.fromJson(m))
+            .toList(),
+      );
 }
 
 class AuthWrapper extends StatefulWidget {
@@ -89,11 +118,7 @@ class LandingPage extends StatelessWidget {
               const SizedBox(height: 6),
               const Text(
                 'Your Guide to Studying in China',
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Colors.grey,
-                  fontStyle: FontStyle.italic,
-                ),
+                style: TextStyle(fontSize: 15, color: Colors.grey, fontStyle: FontStyle.italic),
               ),
               const SizedBox(height: 28),
               const Text(
@@ -103,11 +128,7 @@ class LandingPage extends StatelessWidget {
                 'document legalization, and help you solve Maths, Physics and Chemistry problems step by step.\n\n'
                 'You can chat with us in English or Chinese.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 15.5,
-                  height: 1.55,
-                  color: Color(0xFF333333),
-                ),
+                style: TextStyle(fontSize: 15.5, height: 1.55, color: Color(0xFF333333)),
               ),
               const Spacer(),
               SizedBox(
@@ -117,34 +138,20 @@ class LandingPage extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1E88E5),
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const SignUpPage()),
-                    );
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SignUpPage()));
                   },
-                  child: const Text(
-                    'Get Started',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
+                  child: const Text('Get Started', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                 ),
               ),
               const SizedBox(height: 12),
               TextButton(
                 onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LoginPage()),
-                  );
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginPage()));
                 },
-                child: const Text(
-                  'Already have an account? Sign In',
-                  style: TextStyle(color: Color(0xFF1E88E5)),
-                ),
+                child: const Text('Already have an account? Sign In', style: TextStyle(color: Color(0xFF1E88E5))),
               ),
               const SizedBox(height: 24),
             ],
@@ -167,11 +174,9 @@ class _SignUpPageState extends State<SignUpPage> {
 
   Future<void> signUp() async {
     if (nameCtrl.text.trim().isEmpty || emailCtrl.text.trim().isEmpty) return;
-
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('user_name', nameCtrl.text.trim());
     await prefs.setString('user_email', emailCtrl.text.trim());
-
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
@@ -237,11 +242,9 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> login() async {
     if (emailCtrl.text.trim().isEmpty) return;
-
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('user_name', 'User');
     await prefs.setString('user_email', emailCtrl.text.trim());
-
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
@@ -322,10 +325,7 @@ class SettingsPage extends StatelessWidget {
                   title: const Text('Delete Account?'),
                   content: const Text('This will permanently delete your account data.'),
                   actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
+                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
                     TextButton(
                       onPressed: () {
                         Navigator.pop(context);
@@ -354,62 +354,118 @@ class _ChatScreenState extends State<ChatScreen> {
   final ctrl = TextEditingController();
   final scroll = ScrollController();
   List<Message> messages = [];
+  List<ChatSession> savedChats = [];
   bool loading = false;
   String userName = 'User';
+  String? currentChatId;
 
   static const apiKey = String.fromEnvironment('GEMINI_API_KEY');
 
   @override
   void initState() {
     super.initState();
-    loadUser();
-    messages.add(Message(
-      text: "Ni Hao! 👋\n\nI'm AOOR AI — your guide for studying in China.\n\n"
-          "I can help you with university admissions, scholarships, student visa, "
-          "document legalization, and I can also solve Maths, Physics and Chemistry problems step by step.\n\n"
-          "You can write to me in English or Chinese.\n\nHow can I help you today?",
-      isUser: false,
-    ));
+    loadData();
   }
 
-  Future<void> loadUser() async {
+  Future<void> loadData() async {
     final prefs = await SharedPreferences.getInstance();
+    userName = prefs.getString('user_name') ?? 'User';
+
+    final data = prefs.getString('chats');
+    if (data != null) {
+      final list = jsonDecode(data) as List;
+      savedChats = list.map((e) => ChatSession.fromJson(e)).toList();
+    }
+
+    if (savedChats.isNotEmpty) {
+      final last = savedChats.last;
+      messages = List.from(last.messages);
+      currentChatId = last.id;
+    } else {
+      startNewChat(initial: true);
+    }
+    setState(() {});
+  }
+
+  Future<void> saveChats() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('chats', jsonEncode(savedChats.map((e) => e.toJson()).toList()));
+  }
+
+  void startNewChat({bool initial = false}) {
+    if (!initial && messages.length > 1) {
+      final title = messages.firstWhere((m) => m.isUser, orElse: () => messages.first).text;
+      final shortTitle = title.length > 40 ? '${title.substring(0, 40)}...' : title;
+
+      if (currentChatId != null) {
+        final index = savedChats.indexWhere((c) => c.id == currentChatId);
+        if (index != -1) {
+          savedChats[index] = ChatSession(
+            id: currentChatId!,
+            title: shortTitle,
+            messages: List.from(messages),
+          );
+        }
+      } else {
+        final newId = DateTime.now().millisecondsSinceEpoch.toString();
+        savedChats.add(ChatSession(
+          id: newId,
+          title: shortTitle,
+          messages: List.from(messages),
+        ));
+        currentChatId = newId;
+      }
+      saveChats();
+    }
+
     setState(() {
-      userName = prefs.getString('user_name') ?? 'User';
+      messages = [
+        Message(
+          text: "Ni Hao $userName! 👋\n\nI'm AOOR AI — your guide for studying in China.\n\n"
+              "I can help with admissions, scholarships, visa, documents, and solve Maths, Physics & Chemistry step by step.\n\n"
+              "You can write in English or Chinese.\n\nHow can I help you today?",
+          isUser: false,
+        )
+      ];
+      currentChatId = null;
     });
   }
 
-  Future<void> sendMessage({String? customText}) async {
+  Future<void> sendMessage({String? customText, int? editIndex}) async {
     final text = customText ?? ctrl.text.trim();
     if (text.isEmpty) return;
 
     setState(() {
-      messages.add(Message(text: text, isUser: true));
-      if (customText == null) ctrl.clear();
+      if (editIndex != null) {
+        messages[editIndex].text = text;
+      } else {
+        messages.add(Message(text: text, isUser: true));
+      }
+      ctrl.clear();
       loading = true;
     });
 
     try {
       final model = GenerativeModel(
-        model: 'gemini-3.8-flash-lite',
+        model: 'gemini-3.5-flash-lite',
         apiKey: apiKey,
         systemInstruction: Content.system(
           '''
-You are AOOR AI, a professional and friendly assistant helping international students who want to study in China.
+You are AOOR AI, a professional assistant helping students who want to study in China.
 
-Your expertise includes:
+Expertise:
 - Chinese university admissions
-- CSC and university scholarships
+- CSC & university scholarships
 - Student visa (X1 & X2)
 - Document legalization
-- Step-by-step solutions for Mathematics, Physics and Chemistry
+- Step-by-step Maths, Physics and Chemistry solutions
 - CSC exam preparation
 
 Rules:
-1. When solving Maths, Physics or Chemistry, always show clear step-by-step working.
-2. If the user writes in Chinese, reply in Chinese.
-3. If the user writes in English, reply in English.
-4. Be clear, structured and helpful.
+1. Always show clear step-by-step working for Maths/Physics/Chemistry.
+2. Reply in Chinese if the user writes in Chinese.
+3. Reply in English if the user writes in English.
+4. Be clear and helpful.
 5. Never use markdown asterisks (*).
 ''',
         ),
@@ -419,17 +475,42 @@ Rules:
       final reply = response.text?.replaceAll('*', '') ?? 'No response generated.';
 
       setState(() {
-        messages.add(Message(text: reply, isUser: false));
+        if (editIndex != null) {
+          // After editing, we still generate a new AI reply
+          messages.add(Message(text: reply, isUser: false));
+        } else {
+          messages.add(Message(text: reply, isUser: false));
+        }
         loading = false;
       });
 
+      // Auto-save current chat
+      final title = messages.firstWhere((m) => m.isUser, orElse: () => messages.first).text;
+      final shortTitle = title.length > 40 ? '${title.substring(0, 40)}...' : title;
+
+      if (currentChatId == null) {
+        currentChatId = DateTime.now().millisecondsSinceEpoch.toString();
+        savedChats.add(ChatSession(
+          id: currentChatId!,
+          title: shortTitle,
+          messages: List.from(messages),
+        ));
+      } else {
+        final index = savedChats.indexWhere((c) => c.id == currentChatId);
+        if (index != -1) {
+          savedChats[index] = ChatSession(
+            id: currentChatId!,
+            title: shortTitle,
+            messages: List.from(messages),
+          );
+        }
+      }
+      saveChats();
+
       Future.delayed(const Duration(milliseconds: 100), () {
         if (scroll.hasClients) {
-          scroll.animateTo(
-            scroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
+          scroll.animateTo(scroll.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
         }
       });
     } catch (e) {
@@ -450,26 +531,72 @@ Rules:
           children: [
             Image.asset('logo.png', height: 32),
             const SizedBox(width: 10),
-            const Text(
-              'AOOR AI',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.1,
-              ),
-            ),
+            const Text('AOOR AI', style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.add),
+            tooltip: 'New Chat',
+            onPressed: () => startNewChat(),
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SettingsPage()),
-              );
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()));
             },
           ),
         ],
+      ),
+      drawer: Drawer(
+        child: ListView(
+          children: [
+            DrawerHeader(
+              decoration: const BoxDecoration(color: Color(0xFF1E88E5)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Chat History', style: TextStyle(color: Colors.white, fontSize: 20)),
+                  const SizedBox(height: 8),
+                  Text(userName, style: const TextStyle(color: Colors.white70)),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.add),
+              title: const Text('New Chat'),
+              onTap: () {
+                Navigator.pop(context);
+                startNewChat();
+              },
+            ),
+            const Divider(),
+            ...savedChats.map((chat) {
+              return ListTile(
+                title: Text(chat.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  onPressed: () {
+                    setState(() {
+                      savedChats.removeWhere((c) => c.id == chat.id);
+                      if (currentChatId == chat.id) {
+                        startNewChat(initial: true);
+                      }
+                    });
+                    saveChats();
+                  },
+                ),
+                onTap: () {
+                  setState(() {
+                    messages = List.from(chat.messages);
+                    currentChatId = chat.id;
+                  });
+                  Navigator.pop(context);
+                },
+              );
+            }),
+          ],
+        ),
       ),
       body: Column(
         children: [
@@ -485,9 +612,7 @@ Rules:
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 14),
                     padding: const EdgeInsets.all(14),
-                    constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width * 0.82,
-                    ),
+                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82),
                     decoration: BoxDecoration(
                       color: m.isUser ? const Color(0xFF1E88E5) : Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(16),
@@ -507,14 +632,15 @@ Rules:
                             alignment: Alignment.centerRight,
                             child: TextButton(
                               onPressed: () {
-                                ctrl.text = m.text;
+                                final editCtrl = TextEditingController(text: m.text);
                                 showDialog(
                                   context: context,
                                   builder: (_) => AlertDialog(
                                     title: const Text('Edit Message'),
                                     content: TextField(
-                                      controller: ctrl,
-                                      maxLines: 3,
+                                      controller: editCtrl,
+                                      maxLines: 4,
+                                      decoration: const InputDecoration(border: OutlineInputBorder()),
                                     ),
                                     actions: [
                                       TextButton(
@@ -524,7 +650,7 @@ Rules:
                                       ElevatedButton(
                                         onPressed: () {
                                           Navigator.pop(context);
-                                          sendMessage(customText: ctrl.text.trim());
+                                          sendMessage(customText: editCtrl.text.trim(), editIndex: index);
                                         },
                                         child: const Text('Update'),
                                       ),
@@ -532,10 +658,7 @@ Rules:
                                   ),
                                 );
                               },
-                              child: const Text(
-                                'Edit',
-                                style: TextStyle(fontSize: 12, color: Colors.white70),
-                              ),
+                              child: const Text('Edit', style: TextStyle(fontSize: 12, color: Colors.white70)),
                             ),
                           ),
                         if (!m.isUser)
@@ -568,11 +691,7 @@ Rules:
             decoration: BoxDecoration(
               color: Colors.white,
               boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 8,
-                  offset: const Offset(0, -2),
-                ),
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, -2)),
               ],
             ),
             child: Row(
