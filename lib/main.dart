@@ -676,142 +676,144 @@ Rules:
               itemBuilder: (context, index) {
                 final m = _msgs[index];
                 return Align(
-                  alignment: m.isUser return Align(
-                    alignment: m.isUser ? Alignment.centerRight : Alignment.centerLeft,
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(14),
-                      constraints: BoxConstraints(
-                        maxWidth: MediaQuery.of(context).size.width * 0.8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: m.isUser ? const Color(0xFF0A2540) : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            m.text,
-                            style: TextStyle(
-                              color: m.isUser ? Colors.white : Colors.black87,
-                              height: 1.4,
-                            ),
+                alignment: m.isUser ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(14),
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: m.isUser ? const Color(0xFF0A2540) : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          m.text,
+                          style: TextStyle(
+                            color: m.isUser ? Colors.white : Colors.black87,
+                            height: 1.4,
                           ),
-                          if (!m.isUser) ...[
-                            const SizedBox(height: 10),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.copy, size: 18),
-                                  onPressed: () => _copyText(m.text),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.refresh, size: 18),
-                                  onPressed: () {
-                                    final lastUser = _msgs.lastWhere((e) => e.isUser);
-                                    _send(custom: lastUser.text);
-                                  },
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.thumb_up_alt_outlined, size: 18),
-                                  onPressed: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Thanks for the feedback!')),
-                                    );
-                                  },
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.thumb_down_alt_outlined, size: 18),
-                                  onPressed: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Thanks, we will improve')),
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                          ],
-                          if (m.isUser)
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
+                        ),
+                        if (!m.isUser) ...[
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.copy, size: 18),
+                                onPressed: () => _copyText(m.text),
+                                tooltip: 'Copy',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.refresh, size: 18),
                                 onPressed: () {
-                                  _ctrl.text = m.text;
-                                  showDialog(
-                                    context: context,
-                                    builder: (_) => AlertDialog(
-                                      title: const Text('Edit Message'),
-                                      content: TextField(
-                                        controller: _ctrl,
-                                        maxLines: 3,
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(context),
-                                          child: const Text('Cancel'),
-                                        ),
-                                        ElevatedButton(
-                                          onPressed: () {
-                                            Navigator.pop(context);
-                                            _send(editIndex: index);
-                                          },
-                                          child: const Text('Update'),
-                                        ),
-                                      ],
-                                    ),
+                                  // Simple retry - resend last user message
+                                  final lastUser = _msgs.lastWhere((e) => e.isUser);
+                                  _send(custom: lastUser.text);
+                                },
+                                tooltip: 'Retry',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.thumb_up_alt_outlined, size: 18),
+                                onPressed: () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Thanks for the feedback!')),
                                   );
                                 },
-                                child: const Text('Edit', style: TextStyle(fontSize: 12)),
                               ),
-                            ),
+                              IconButton(
+                                icon: const Icon(Icons.thumb_down_alt_outlined, size: 18),
+                                onPressed: () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Thanks, we will improve')),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
                         ],
-                      ),
+                        if (m.isUser)
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: () {
+                                _ctrl.text = m.text;
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => AlertDialog(
+                                    title: const Text('Edit Message'),
+                                    content: TextField(
+                                      controller: _ctrl,
+                                      maxLines: 3,
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          _send(editIndex: index);
+                                        },
+                                        child: const Text('Update'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                              child: const Text('Edit', style: TextStyle(fontSize: 12)),
+                            ),
+                          ),
+                      ],
                     ),
-                  );
-                },
-              ),
-            ),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Text('AOOR AI is thinking...'),
-              ),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, -2),
                   ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _ctrl,
-                      decoration: const InputDecoration(
-                        hintText: 'Ask anything...',
-                        border: InputBorder.none,
-                      ),
-                      maxLines: 4,
-                      minLines: 1,
+                );
+              },
+            ),
+          ),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Text('AOOR AI is thinking...'),
+            ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _ctrl,
+                    decoration: const InputDecoration(
+                      hintText: 'Ask anything...',
+                      border: InputBorder.none,
                     ),
+                    maxLines: 4,
+                    minLines: 1,
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.send, color: Color(0xFF0A2540)),
-                    onPressed: _loading ? null : () => _send(),
-                  ),
-                ],
-              ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.send, color: Color(0xFF0A2540)),
+                  onPressed: _loading ? null : () => _send(),
+                ),
+              ],
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
   }
-              }
+}
